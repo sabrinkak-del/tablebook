@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TableBook - הזמנת מקומות במסעדות</title>
+
+    <!-- Fonts -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap"
+        rel="stylesheet">
+
+    <!-- Tailwind Play CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            DEFAULT: '#a0522d',
+                            foreground: '#ffffff',
+                        },
+                        background: '#faf8f6',
+                        foreground: '#1c1917',
+                        card: {
+                            DEFAULT: '#ffffff',
+                            foreground: '#1c1917',
+                        },
+                        muted: {
+                            DEFAULT: '#f5f2f0',
+                            foreground: '#78716c',
+                        },
+                        border: '#e7e2df',
+                        accent: '#f5f2f0',
+                    },
+                    fontFamily: {
+                        sans: ['Assistant', 'sans-serif'],
+                        serif: ['Playfair Display', 'serif'],
+                    },
+                }
+            }
+        }
+    </script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style type="text/tailwindcss">
+        @layer base {
+            body {
+                @apply bg-background text-foreground antialiased;
+            }
+        }
+        @layer components {
+            .btn {
+                @apply inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 border border-transparent;
+            }
+            .btn-primary {
+                @apply bg-primary text-primary-foreground hover:bg-primary/90;
+            }
+            .btn-ghost {
+                @apply hover:bg-accent hover:text-foreground;
+            }
+            .btn-outline {
+                @apply border-border hover:bg-accent hover:text-foreground;
+            }
+            .card {
+                @apply rounded-xl border border-border bg-card text-card-foreground shadow-sm;
+            }
+            .input {
+                @apply flex h-10 w-full rounded-md border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20;
+            }
+            .label {
+                @apply text-sm font-medium leading-none mb-2 block;
+            }
+        }
+
+        .modal {
+            @apply fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity duration-300;
+        }
+        .modal.active {
+            @apply opacity-100 pointer-events-auto;
+        }
+        .admin-tab.active {
+            @apply border-primary text-primary;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Header -->
+    <header class="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-md">
+        <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+            <a href="#" onclick="showView('home')"
+                class="flex items-center gap-2 text-xl font-serif font-bold tracking-tight text-foreground">
+                TableBook
+            </a>
+            <nav class="flex items-center gap-2">
+                <a href="#" onclick="showView('admin')" id="nav-admin" class="hidden btn btn-ghost text-red-600">
+                    <span class="hidden sm:inline">ניהול אתר</span>
+                </a>
+                <a href="#" onclick="showView('personal')" id="nav-personal"
+                    class="hidden btn btn-ghost text-muted-foreground">
+                    <span class="hidden sm:inline">אזור אישי</span>
+                </a>
+                <div id="auth-buttons" class="flex items-center gap-2">
+                    <button onclick="openModal('login-modal')"
+                        class="btn btn-ghost text-muted-foreground">כניסה</button>
+                    <button onclick="openModal('register-modal')" class="btn btn-primary font-bold">הרשמה</button>
+                </div>
+                <div id="user-info" class="hidden flex items-center gap-4">
+                    <span id="welcome-msg" class="text-sm font-medium hidden md:inline"></span>
+                    <button onclick="logout()" class="btn btn-outline text-xs py-1 px-3">יציאה</button>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <main id="main-content">
+        <!-- Home View -->
+        <div id="view-home">
+            <section class="border-b border-border bg-white">
+                <div class="mx-auto max-w-6xl px-4 py-20 text-center">
+                    <h1 class="font-serif text-5xl font-bold tracking-tight text-foreground md:text-6xl">הזמינו שולחן
+                        בקלות</h1>
+                    <p class="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground">דפדפו בין המסעדות הטובות ביותר
+                        המנוהלות במערכת המקצועית שלנו.</p>
+                </div>
+            </section>
+            <section class="mx-auto max-w-6xl px-4 py-12">
+                <div class="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+                    <h2 id="results-count" class="text-2xl font-semibold text-foreground">מסעדות</h2>
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <div class="relative w-full sm:w-72">
+                            <i data-lucide="search"
+                                class="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"></i>
+                            <input type="text" id="restaurant-search" placeholder="חפש מסעדה..." class="input pr-10">
+                        </div>
+                        <select id="city-filter" class="input w-full sm:w-44">
+                            <option value="all">כל הערים</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="restaurant-grid" class="mt-8 grid gap-8 sm:grid-cols-2 lg:grid-cols-3"></div>
+                <div id="empty-state" class="hidden mt-20 flex flex-col items-center justify-center text-center">
+                    <i data-lucide="search" class="h-12 w-12 text-muted-foreground/30"></i>
+                    <p class="mt-4 text-xl font-medium text-foreground">לא נמצאו מסעדות</p>
+                </div>
+            </section>
+        </div>
+
+        <!-- Personal Area View -->
+        <div id="view-personal" class="hidden">
+            <section class="mx-auto max-w-4xl px-4 py-12">
+                <h2 class="text-3xl font-serif font-bold mb-8">ההזמנות שלי</h2>
+                <div id="reservations-list" class="grid gap-4"></div>
+                <div id="no-reservations" class="hidden py-10 text-center bg-white border rounded">Kein Reservations
+                    Found</div>
+            </section>
+        </div>
+
+        <!-- Admin View -->
+        <div id="view-admin" class="hidden">
+            <section class="mx-auto max-w-6xl px-4 py-12">
+                <div class="flex items-center justify-between mb-8">
+                    <div>
+                        <h2 class="text-3xl font-serif font-bold">פאנל ניהול אתר</h2>
+                        <p class="text-muted-foreground">ניהול מלא של מסעדות והזמנות הפלטפורמה.</p>
+                    </div>
+                    <button onclick="openRestaurantModal()" class="btn btn-primary gap-2">
+                        <i data-lucide="plus" class="h-4 w-4"></i>
+                        הוספת מסעדה חדשה
+                    </button>
+                </div>
+
+                <!-- Tabs -->
+                <div class="flex border-b border-border mb-8">
+                    <button onclick="setAdminTab('restaurants')" id="tab-restaurants"
+                        class="admin-tab px-6 py-3 font-medium border-b-2 border-transparent transition-all active">מסעדות</button>
+                    <button onclick="setAdminTab('bookings')" id="tab-bookings"
+                        class="admin-tab px-6 py-3 font-medium border-b-2 border-transparent transition-all">הזמנות
+                        (כללי)</button>
+                    <button onclick="setAdminTab('stats')" id="tab-stats"
+                        class="admin-tab px-6 py-3 font-medium border-b-2 border-transparent transition-all">סטטיסטיקה</button>
+                </div>
+
+                <!-- Admin Content -->
+                <div id="admin-restaurants" class="space-y-4">
+                    <div class="bg-card border rounded-xl overflow-hidden">
+                        <table class="w-full text-right">
+                            <thead class="bg-muted text-muted-foreground text-sm">
+                                <tr>
+                                    <th class="p-4">מסעדה</th>
+                                    <th class="p-4">עיר</th>
+                                    <th class="p-4">שולחנות</th>
+                                    <th class="p-4 text-left">פעולות</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-restaurants-list"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="admin-bookings" class="hidden space-y-4">
+                    <div class="bg-card border rounded-xl overflow-hidden">
+                        <table class="w-full text-right">
+                            <thead class="bg-muted text-muted-foreground text-sm">
+                                <tr>
+                                    <th class="p-4">לקוח</th>
+                                    <th class="p-4">מסעדה</th>
+                                    <th class="p-4">תאריך</th>
+                                    <th class="p-4">סועדים</th>
+                                    <th class="p-4 text-left">פעולות</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-bookings-list"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="admin-stats" class="hidden">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="card p-6 text-center">
+                            <p class="text-muted-foreground mb-1">סה"כ מסעדות</p>
+                            <h4 id="stat-restaurants" class="text-4xl font-bold text-primary">0</h4>
+                        </div>
+                        <div class="card p-6 text-center">
+                            <p class="text-muted-foreground mb-1">סה"כ הזמנות</p>
+                            <h4 id="stat-bookings" class="text-4xl font-bold text-primary">0</h4>
+                        </div>
+                        <div class="card p-6 text-center">
+                            <p class="text-muted-foreground mb-1">סה"כ משתמשים</p>
+                            <h4 id="stat-users" class="text-4xl font-bold text-primary">0</h4>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Modals -->
+    <div id="booking-modal" class="modal">
+        <div class="bg-card w-full max-w-md rounded-2xl p-8 relative shadow-2xl">
+            <button onclick="closeModal('booking-modal')" class="absolute top-4 left-4"><i data-lucide="x"></i></button>
+            <h2 class="text-2xl font-serif font-bold mb-6" id="modal-title">הזמנת מקום</h2>
+            <form onsubmit="handleBooking(event)">
+                <input type="hidden" id="book-restaurant-id">
+                <div class="mb-4"><label class="label">שם מלא</label><input type="text" id="book-name" required
+                        class="input"></div>
+                <div class="mb-4"><label class="label">אימייל</label><input type="email" id="book-email" required
+                        class="input"></div>
+                <div class="mb-4"><label class="label">טלפון</label><input type="tel" id="book-phone" required
+                        class="input"></div>
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div><label class="label">סועדים</label><input type="number" id="book-guests" required class="input"
+                            value="2"></div>
+                    <div><label class="label">תאריך</label><input type="date" id="book-date" required class="input">
+                    </div>
+                </div>
+                <button type="submit" class="w-full btn btn-primary py-4">אשר הזמנה</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Restaurant Management Modal -->
+    <div id="restaurant-modal" class="modal">
+        <div class="bg-card w-full max-w-lg rounded-2xl p-8 relative shadow-2xl">
+            <button onclick="closeModal('restaurant-modal')" class="absolute top-4 left-4"><i
+                    data-lucide="x"></i></button>
+            <h2 class="text-2xl font-serif font-bold mb-6" id="restaurant-modal-title">הוספת מסעדה</h2>
+            <form onsubmit="handleSaveRestaurant(event)">
+                <input type="hidden" id="edit-restaurant-id">
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div class="col-span-2"><label class="label">שם המסעדה</label><input type="text" id="res-name"
+                            required class="input"></div>
+                    <div><label class="label">עיר</label><input type="text" id="res-city" required class="input"></div>
+                    <div><label class="label">כתובת</label><input type="text" id="res-address" required class="input">
+                    </div>
+                    <div class="col-span-2"><label class="label">כתובת תמונה (URL)</label><input type="text"
+                            id="res-image" required class="input" placeholder="https://..."></div>
+                    <div><label class="label">כמות שולחנות</label><input type="number" id="res-tables" required
+                            class="input" value="10"></div>
+                </div>
+                <button type="submit" class="w-full btn btn-primary py-4">שמור שינויים</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Register Modal -->
+    <div id="register-modal" class="modal">
+        <div class="bg-card w-full max-w-sm rounded-2xl p-8 relative shadow-2xl">
+            <button onclick="closeModal('register-modal')" class="absolute top-4 left-4"><i
+                    data-lucide="x"></i></button>
+            <h2 class="text-2xl font-serif font-bold mb-6 text-center">הרשמה</h2>
+            <form onsubmit="handleRegister(event)">
+                <div class="mb-4"><label class="label">שם מלא</label><input type="text" id="reg-name" required
+                        class="input"></div>
+                <div class="mb-4"><label class="label">אימייל</label><input type="email" id="reg-email" required
+                        class="input"></div>
+                <div class="mb-6"><label class="label">סיסמה</label><input type="password" id="reg-pass" required
+                        class="input"></div>
+                <button type="submit" class="w-full btn btn-primary py-3 w-full">הירשם עכשיו</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="login-modal" class="modal">
+        <div class="bg-card w-full max-w-sm rounded-2xl p-8 relative shadow-2xl">
+            <button onclick="closeModal('login-modal')" class="absolute top-4 left-4"><i data-lucide="x"></i></button>
+            <h2 class="text-2xl font-serif font-bold mb-6 text-center">כניסה</h2>
+            <form onsubmit="handleLogin(event)">
+                <div class="mb-4">
+                    <label class="label">אימייל</label>
+                    <input type="email" id="login-email" required class="input" list="email-options">
+                    <datalist id="email-options">
+                        <option value="admin@gmail.com">
+                        <option value="sabrinka.k@gmail.com">
+                    </datalist>
+                </div>
+                <div class="mb-6"><label class="label">סיסמה</label><input type="password" id="login-pass" required
+                        class="input"></div>
+                <button type="submit" class="w-full btn btn-primary py-3 w-full">התחבר</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="border-t border-border bg-white mt-20 py-12">
+        <div class="mx-auto max-w-6xl px-4 text-center">
+            <div class="flex justify-center items-center gap-2 mb-4 font-serif font-bold text-lg">
+                <i data-lucide="utensils-crossed" class="h-5 w-5 text-primary"></i> TableBook
+            </div>
+            <p class="text-muted-foreground text-sm">© 2026 Admin Dashboard Integrated | פלטפורמת ניהול המסעדות של ישראל
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        const INITIAL_RESTAURANTS = [
+            { id: "r1", name: "Bella Tavola", city: "תל אביב", address: "שדרות רוטשילד 23", image: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=800", tables: 5 },
+            { id: "r2", name: "The Garden Kitchen", city: "ירושלים", address: "בן יהודה 8", image: "https://images.unsplash.com/photo-1552566626-52f8b828add9?auto=format&fit=crop&q=80&w=800", tables: 4 },
+            { id: "r3", name: "Harbor Grill", city: "חיפה", address: "הנמל 45", image: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&q=80&w=800", tables: 5 },
+            { id: "r4", name: "Olive & Vine", city: "תל אביב", address: "דיזנגוף 12", image: "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?auto=format&fit=crop&q=80&w=800", tables: 3 },
+            { id: "r5", name: "Noa Bistro", city: "הרצליה", address: "השרון 3", image: "https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&q=80&w=800", tables: 4 },
+            { id: "r6", name: "Sakura Sushi", city: "תל אביב", address: "אבן גבירול 67", image: "https://images.unsplash.com/photo-1579027989536-b7b1f875659b?auto=format&fit=crop&q=80&w=800", tables: 5 },
+        ];
+
+        let restaurants = JSON.parse(localStorage.getItem('restaurants')) || INITIAL_RESTAURANTS;
+        let reservations = JSON.parse(localStorage.getItem('reservations')) || [];
+        let users = JSON.parse(localStorage.getItem('users')) || [];
+        let currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
+
+        const ADMIN_EMAIL = "admin@gmail.com";
+        const ADMIN_PASS = "123456";
+
+        function showView(view) {
+            document.querySelectorAll('main > div').forEach(d => d.classList.add('hidden'));
+            document.getElementById('view-' + view).classList.remove('hidden');
+
+            document.querySelectorAll('nav a').forEach(a => a.classList.remove('bg-primary/10', 'text-primary'));
+            if (document.getElementById('nav-' + view)) {
+                document.getElementById('nav-' + view).classList.add('bg-primary/10', 'text-primary');
+            }
+
+            if (view === 'personal') renderReservations();
+            if (view === 'admin') renderAdminView();
+            window.scrollTo(0, 0);
+        }
+
+        function openModal(id) { document.getElementById(id).classList.add('active'); lucide.createIcons(); }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+        function handleLogin(e) {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value.trim().toLowerCase();
+            const pass = document.getElementById('login-pass').value;
+
+            if (email === ADMIN_EMAIL && pass === ADMIN_PASS) {
+                currentUser = { name: "מנהל מערכת", email: ADMIN_EMAIL, role: "admin" };
+                saveAndRefresh();
+                showView('admin');
+            } else {
+                const user = users.find(u => u.email === email && u.pass === pass);
+                if (user) {
+                    currentUser = user;
+                    saveAndRefresh();
+                    showView('personal');
+                } else {
+                    alert('פרטים שגויים');
+                }
+            }
+            closeModal('login-modal');
+        }
+
+        function handleRegister(e) {
+            e.preventDefault();
+            const name = document.getElementById('reg-name').value.trim();
+            const email = document.getElementById('reg-email').value.trim().toLowerCase();
+            const pass = document.getElementById('reg-pass').value;
+
+            if (users.find(u => u.email === email)) {
+                alert('האימייל ' + email + ' כבר קיים במערכת. אנא נסה להתחבר במקום להירשם.');
+                closeModal('register-modal');
+                openModal('login-modal');
+                return;
+            }
+            const newUser = { id: Date.now(), name, email, pass, role: 'user' };
+            users.push(newUser);
+            currentUser = newUser;
+            saveAndRefresh();
+            closeModal('register-modal');
+            showView('personal');
+        }
+
+        function logout() {
+            currentUser = null;
+            localStorage.removeItem('currentUser');
+            updateUI();
+            showView('home');
+        }
+
+        function saveAndRefresh() {
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            localStorage.setItem('restaurants', JSON.stringify(restaurants));
+            localStorage.setItem('reservations', JSON.stringify(reservations));
+            localStorage.setItem('users', JSON.stringify(users));
+            updateUI();
+            renderRestaurants();
+        }
+
+        function updateUI() {
+            const authBtns = document.getElementById('auth-buttons');
+            const userInfo = document.getElementById('user-info');
+            const navAdmin = document.getElementById('nav-admin');
+            const navPersonal = document.getElementById('nav-personal');
+
+            if (currentUser) {
+                authBtns.classList.add('hidden');
+                userInfo.classList.remove('hidden');
+                document.getElementById('welcome-msg').textContent = 'שלום, ' + currentUser.name;
+                if (currentUser.role === 'admin') {
+                    navAdmin.classList.remove('hidden');
+                    navPersonal.classList.add('hidden');
+                } else {
+                    navAdmin.classList.add('hidden');
+                    navPersonal.classList.remove('hidden');
+                }
+            } else {
+                authBtns.classList.remove('hidden');
+                userInfo.classList.add('hidden');
+                navAdmin.classList.add('hidden');
+                navPersonal.classList.add('hidden');
+            }
+        }
+
+        // Restaurant Logic
+        function renderRestaurants() {
+            const grid = document.getElementById('restaurant-grid');
+            grid.innerHTML = '';
+            restaurants.forEach(r => {
+                const card = document.createElement('div');
+                card.className = 'card group overflow-hidden hover:shadow-xl transition-all';
+                card.innerHTML = `
+                    <div class="relative aspect-[16/10] overflow-hidden">
+                        <img src="${r.image}" class="w-full h-full object-cover transition-transform group-hover:scale-110">
+                    </div>
+                    <div class="p-6">
+                        <h3 class="text-xl font-serif font-bold mb-2">${r.name}</h3>
+                        <p class="text-muted-foreground text-sm mb-4">${r.address}, ${r.city}</p>
+                        <button onclick="openBooking('${r.id}')" class="w-full btn btn-primary py-3">הזמן מקום</button>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+            lucide.createIcons();
+        }
+
+        function openBooking(id) {
+            document.getElementById('book-restaurant-id').value = id;
+            if (currentUser) {
+                document.getElementById('book-name').value = currentUser.name;
+                document.getElementById('book-email').value = currentUser.email;
+            }
+            openModal('booking-modal');
+        }
+
+        function handleBooking(e) {
+            e.preventDefault();
+            const res = {
+                id: Date.now(),
+                restaurantId: document.getElementById('book-restaurant-id').value,
+                restaurantName: restaurants.find(rr => rr.id === document.getElementById('book-restaurant-id').value).name,
+                name: document.getElementById('book-name').value,
+                email: document.getElementById('book-email').value,
+                phone: document.getElementById('book-phone').value,
+                guests: document.getElementById('book-guests').value,
+                date: document.getElementById('book-date').value
+            };
+            reservations.push(res);
+            saveAndRefresh();
+            alert('הזמנה בוצעה בהצלחה!');
+            closeModal('booking-modal');
+            if (currentUser?.role !== 'admin') showView('personal');
+        }
+
+        // Admin Dash
+        function renderAdminView() {
+            if (currentUser?.role !== 'admin') return;
+            const resList = document.getElementById('admin-restaurants-list');
+            const bookList = document.getElementById('admin-bookings-list');
+
+            resList.innerHTML = '';
+            restaurants.forEach(r => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-t';
+                tr.innerHTML = `
+                    <td class="p-4 font-bold">${r.name}</td>
+                    <td class="p-4 text-muted-foreground">${r.city}</td>
+                    <td class="p-4">${r.tables}</td>
+                    <td class="p-4 text-left flex gap-2 justify-end">
+                        <button onclick="openRestaurantModal('${r.id}')" class="p-2 text-primary hover:bg-primary/10 rounded"><i data-lucide="edit-2" class="h-4 w-4"></i></button>
+                        <button onclick="deleteRestaurant('${r.id}')" class="p-2 text-red-500 hover:bg-red-50 rounded"><i data-lucide="trash-2" class="h-4 w-4"></i></button>
+                    </td>
+                `;
+                resList.appendChild(tr);
+            });
+
+            bookList.innerHTML = '';
+            reservations.forEach(b => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-t';
+                tr.innerHTML = `
+                    <td class="p-4">
+                        <div class="font-bold">${b.name}</div>
+                        <div class="text-xs text-muted-foreground">${b.email}</div>
+                    </td>
+                    <td class="p-4">${b.restaurantName}</td>
+                    <td class="p-4">${b.date}</td>
+                    <td class="p-4">${b.guests}</td>
+                    <td class="p-4 text-left">
+                        <button onclick="deleteBooking(${b.id})" class="p-2 text-red-500 hover:bg-red-50 rounded"><i data-lucide="x-circle" class="h-4 w-4"></i></button>
+                    </td>
+                `;
+                bookList.appendChild(tr);
+            });
+
+            document.getElementById('stat-restaurants').textContent = restaurants.length;
+            document.getElementById('stat-bookings').textContent = reservations.length;
+            document.getElementById('stat-users').textContent = users.length + 1;
+            lucide.createIcons();
+        }
+
+        function setAdminTab(tab) {
+            document.querySelectorAll('#view-admin > section > div[id^="admin-"]').forEach(d => d.classList.add('hidden'));
+            document.getElementById('admin-' + tab).classList.remove('hidden');
+            document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+            document.getElementById('tab-' + tab).classList.add('active');
+        }
+
+        function openRestaurantModal(id = null) {
+            if (id) {
+                const r = restaurants.find(rr => rr.id === id);
+                document.getElementById('edit-restaurant-id').value = r.id;
+                document.getElementById('res-name').value = r.name;
+                document.getElementById('res-city').value = r.city;
+                document.getElementById('res-address').value = r.address;
+                document.getElementById('res-image').value = r.image;
+                document.getElementById('res-tables').value = r.tables;
+                document.getElementById('restaurant-modal-title').textContent = "עריכת מסעדה";
+            } else {
+                document.getElementById('edit-restaurant-id').value = "";
+                document.getElementById('res-name').value = "";
+                document.getElementById('res-city').value = "";
+                document.getElementById('res-address').value = "";
+                document.getElementById('res-image').value = "";
+                document.getElementById('res-tables').value = "10";
+                document.getElementById('restaurant-modal-title').textContent = "הוספת מסעדה";
+            }
+            openModal('restaurant-modal');
+        }
+
+        function handleSaveRestaurant(e) {
+            e.preventDefault();
+            const id = document.getElementById('edit-restaurant-id').value;
+            const data = {
+                id: id || 'r' + Date.now(),
+                name: document.getElementById('res-name').value,
+                city: document.getElementById('res-city').value,
+                address: document.getElementById('res-address').value,
+                image: document.getElementById('res-image').value,
+                tables: document.getElementById('res-tables').value
+            };
+
+            if (id) {
+                restaurants = restaurants.map(r => r.id === id ? data : r);
+            } else {
+                restaurants.push(data);
+            }
+            saveAndRefresh();
+            closeModal('restaurant-modal');
+            renderAdminView();
+        }
+
+        function deleteRestaurant(id) {
+            if (confirm('בטוח? זה ימחוק את המסעדה לצמיתות')) {
+                restaurants = restaurants.filter(r => r.id !== id);
+                saveAndRefresh();
+                renderAdminView();
+            }
+        }
+
+        function deleteBooking(id) {
+            if (confirm('לבטל את ההזמנה?')) {
+                reservations = reservations.filter(b => b.id !== id);
+                saveAndRefresh();
+                renderAdminView();
+            }
+        }
+
+        // Init
+        updateUI();
+        renderRestaurants();
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>
